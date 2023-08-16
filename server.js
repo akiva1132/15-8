@@ -5,25 +5,6 @@ uuidv4(); // ⇨ '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d'
 
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
-const myPlaintextPassword = "s0//P4$$w0rD";
-const someOtherPlaintextPassword = "not_bacon";
-
-function encryptionPassword(password){
-  bcrypt.genSalt(saltRounds, function (err, salt) {
-    bcrypt.hash(myPlaintextPassword, salt, function (err, hash) {
-      return hash
-    });
-  });
-}
-
-
-// bcrypt.compare(myPlaintextPassword, hash, function (err, result) {
-// //   result == true
-//   console.log(result);
-// });
-// bcrypt.compare(someOtherPlaintextPassword, hash, function (err, result) {
-//   // result == false
-// });
 
 count = 4;
 let data1 = [
@@ -32,6 +13,8 @@ let data1 = [
   { id: uuidv4(), email: "yujng", password: 12645765 },
 ];
 let data = [];
+app.use(express.json());
+
 
 function readAllUsers() {
   app.get("/users", (req, res) => {
@@ -46,7 +29,6 @@ function readAllUsers() {
 }
 
 function getUserById() {
-  app.use(express.json());
   app.get("/userById", (req, res) => {
     const id = req.body.id;
     data.forEach((element) => {
@@ -59,11 +41,13 @@ function getUserById() {
 }
 
 function createUser() {
-  app.use(express.json());
   app.post("/createUser", (req, res) => {
     const user = { id: uuidv4() };
     user.email = req.body.email;
-    user.password = encryptionPassword(req.body.password);
+    const password = req.body.password;
+    bcrypt.hash(password, saltRounds, function (err, hash) {
+      user.password = hash;
+    });
     data.push(user);
     res.write("user created");
     console.log(data);
@@ -73,7 +57,6 @@ function createUser() {
 }
 
 function updatingUser() {
-  app.use(express.json());
   app.put("/updatingUser", (req, res) => {
     const id = req.body.id;
     data.forEach((element) => {
@@ -88,7 +71,6 @@ function updatingUser() {
 }
 
 function removeUser() {
-  app.use(express.json());
   app.post("/removeUser", (req, res) => {
     const id = req.body.id;
     console.log(id);
@@ -109,17 +91,18 @@ function removeUser() {
 }
 
 function connect() {
-  app.use(express.json());
-  app.get("/connect", (req, res) => {
-    const id = req.body.id;
+  app.post("/connect", (req, res) => {
+    const email = req.body.email;
     const password = req.body.password;
-    console.log(id, password);
+    console.log(email, password);
     data.forEach((element) => {
-      if (element.id == id && element.password == password) {
-        res.write(element + "is in the system");
-      }
+      bcrypt.compare(password, element.password).then((check) => {
+        if (check && element.email === email) {
+          res.write("is in the system");
+          res.end();
+        }
+      });
     });
-    res.end();
   });
 }
 
