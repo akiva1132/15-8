@@ -8,6 +8,28 @@ const saltRounds = 10;
 let fileData = "./data.json";
 app.use(express.json());
 
+async function importProduct() {
+  const response = await fetch("https://dummyjson.com/products", {
+    method: "get",
+  });
+  if (response.ok) {
+    return await response.json();
+  }
+}
+
+async function sendToStore(user){
+  const response = await fetch("https://jsonplaceholder.typicode.com/users", {
+    method: "post",
+    body: JSON.stringify(user)
+  });
+  if (response.ok) {
+    let res =  await response.json();
+    console.log(res)
+  }
+}
+
+
+
 async function getData() {
   let promise = new Promise((resolve, reject) => {
     jsonfile.readFile(fileData, (err, resultData) => {
@@ -83,9 +105,13 @@ app.post("/user", async (req, res) => {
     const user = { id: uuidv4() };
     user.email = req.body.email;
     const password = req.body.password;
-    bcrypt.hash(password, saltRounds).then((hash) => {
+    const product = await importProduct().then((a) => a.products[Math.floor(Math.random() * 10)].description
+    );
+    user.product = product;
+    bcrypt.hash(password, saltRounds).then(async (hash) => {
       user.password = hash;
       data.push(user);
+      await sendToStore(user)
       jsonfile.writeFile(fileData, data, (err, resultData) => {
         if (err) {
           res.send(err);
@@ -160,8 +186,6 @@ app.post("/connect", async (req, res) => {
     }
   });
 });
-
-
 
 app.listen(9051, () => {
   console.log("run...");
