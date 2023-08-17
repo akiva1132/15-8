@@ -1,22 +1,71 @@
 const express = require("express");
-const app = express();
 const { v4: uuidv4 } = require("uuid");
-uuidv4(); // ⇨ '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d'
+const jsonfile = require("jsonfile");
+const app = express();
 
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
-let data = [];
+let fileData = "./data.json";
 app.use(express.json());
 
-app.get("/users", (req, res) => {
+async function getData() {
+  let promise = new Promise((resolve, reject) => {
+    jsonfile.readFile(fileData, (err, resultData) => {
+      if (err) reject(err);
+      resolve(resultData);
+    });
+  });
+  return promise;
+}
+
+async function checkPassword(password, passwordFromdata) {
+  let promise = new Promise((resolve, reject) => {
+    bcrypt.compare(password, passwordFromdata).then((check) => {
+      if (check === true) {
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    });
+  });
+  return promise;
+}
+
+function emailIntegrityCheck(email) {
+  const check = email.split("@");
+  if (check.length === 2 && check[1].includes(".")) {
+    return true;
+  }
+}
+
+function passwordIntegrityCheck(password) {
+  let bigChar = false;
+  let smallChar = false;
+  let count = 0;
+  for (i of password) {
+    count++;
+    if (i.charCodeAt(0) >= 65 && i.charCodeAt(0) <= 97) {
+      bigChar = true;
+    } else if (i.charCodeAt(0) >= 97 && i.charCodeAt(0) <= 122) {
+      smallChar = true;
+    }
+  }
+  if (bigChar === true && smallChar === true && count >= 8) {
+    return true;
+  }
+}
+
+app.get("/users", async (req, res) => {
+  let data = await getData();
   if (data.length > 0) {
-    res.send(JSON.stringify(data));
+    res.json(data);
   } else {
     res.send("data is empty");
   }
 });
 
-app.get("/userById/:id", (req, res) => {
+app.get("/userById/:id", async (req, res) => {
+  let data = await getData();
   const id = req.params.id;
   data.forEach((element) => {
     if (element.id == id) {
@@ -25,30 +74,63 @@ app.get("/userById/:id", (req, res) => {
   });
 });
 
-app.post("/user", (req, res) => {
-  const user = { id: uuidv4() };
-  user.email = req.body.email;
-  const password = req.body.password;
-  bcrypt.hash(password, saltRounds).then((hash) => {
-    user.password = hash;
-    data.push(user);
-    res.send("user created");
-  });
+app.post("/user", async (req, res) => {
+  if (
+    passwordIntegrityCheck(req.body.password) &&
+    emailIntegrityCheck(req.body.email)
+  ) {
+    let data = await getData();
+    const user = { id: uuidv4() };
+    user.email = req.body.email;
+    const password = req.body.password;
+    bcrypt.hash(password, saltRounds).then((hash) => {
+      user.password = hash;
+      data.push(user);
+      jsonfile.writeFile(fileData, data, (err, resultData) => {
+        if (err) {
+          res.send(err);
+        }
+        res.send("user created");
+      });
+    });
+  } else {
+    res.send("invaild pasword or email");
+  }
 });
 
-app.put("/user", (req, res) => {
-  const id = req.body.id;
-  data.forEach((element) => {
-    if (element.id === id) {
-      element.email = req.body.email;
-      element.pasword = bcrypt.hashSync(req.body.password, saltRounds);
-      res.send("update sucsess");
-    }
-  });
+app.put("/user", async (req, res) => {
+  if (
+    passwordIntegrityCheck(req.body.password) &&
+    emailIntegrityCheck(req.body.email)
+  ) {
+    let data = await getData();
+    const id = req.body.id;
+    let find = false;
+    data.forEach((element) => {
+      if (element.id === id) {
+        find = true;
+        element.email = req.body.email;
+        element.pasword = bcrypt.hashSync(req.body.password, saltRounds);
+      }
+    });
+    jsonfile.writeFile(fileData, data, (err, resultData) => {
+      if (err) {
+        res.send(err);
+      }
+      if (find) {
+        res.send("update sucsess");
+      } else {
+        res.send("id not found");
+      }
+    });
+  } else {
+    res.send("invaild pasword or email");
+  }
 });
 
-app.delete("/user", (req, res) => {
-  const id = req.body.id;
+app.delete("/user/:id", async (req, res) => {
+  let data = await getData();
+  const id = req.params.id;
   let tempData = [];
   data.forEach((element) => {
     if (element.id != id) {
@@ -58,21 +140,29 @@ app.delete("/user", (req, res) => {
   if (data.length > tempData.length) {
     res.send("delete sucsess");
   }
-  data = tempData;
-});
-
-app.post("/connect", (req, res) => {
-  const email = req.body.email;
-  const password = req.body.password;
-  data.forEach((element) => {
-    bcrypt.compare(password, element.password).then((check) => {
-      if (check && element.email === email) {
-        res.send(element.email + "is in the system");
-      }
-    });
+  jsonfile.writeFile(fileData, tempData, (err, resultData) => {
+    if (err) {
+      res.send(err);
+    }
   });
 });
 
-app.listen(8080, () => {
+app.post("/connect", async (req, res) => {
+  let data = await getData();
+  const email = req.body.email;
+  const password = req.body.password;
+  let find = false;
+  data.forEach(async (element) => {
+    let result = await checkPassword(password, element.password);
+    if (element.email === email && result) {
+      find = true;
+      res.send(element.email + " user found");
+    }
+  });
+});
+
+
+
+app.listen(9051, () => {
   console.log("run...");
 });
